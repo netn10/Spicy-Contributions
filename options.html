@@ -22,9 +22,9 @@
     <input id="token" type="password" placeholder="ghp_..." />
     <small>Needs <code>repo</code> (for private repos) and <code>actions:read</code> scopes to see failing runs. Public-only? A no-scope token is fine for many repos.</small>
 
-    <label for="repos">Repositories to track (comma-separated)</label>
+    <label for="repos">Repositories to track (comma-separated) - Optional</label>
     <textarea id="repos" rows="4" placeholder="owner1/repo1, owner2/repo2"></textarea>
-    <small>You can paste full repo URLs or <code>owner/repo</code> pairs. Only these repos are scanned.</small>
+    <small>You can paste full repo URLs or <code>owner/repo</code> pairs. The extension will auto-detect the current repository, but you can specify fallback repos here.</small>
 
     <label for="bugLabel">Bug label name</label>
     <input id="bugLabel" type="text" placeholder="bug" />
@@ -38,9 +38,11 @@
     <div class="hint">
       <strong>How it works</strong>
       <ul>
-        <li>"Shipped bugs": any <em>closed</em> issue with the specified label in your selected repos; the contribution cell on the <em>closed date</em> turns red.</li>
-        <li>"CI failures": any failed workflow run in those repos; the cell for the run's <em>created date</em> blinks.</li>
+        <li>The extension automatically detects the repository you're currently viewing on GitHub.</li>
+        <li>"Shipped bugs": any <em>closed</em> issue with the specified label in the detected repo; the contribution cell on the <em>closed date</em> turns red.</li>
+        <li>"CI failures": any failed workflow run in the detected repo; the cell for the run's <em>created date</em> blinks.</li>
         <li>Only the last 365 days are scanned for performance.</li>
+        <li>If no repository is detected, it will use the repositories listed above as fallback.</li>
       </ul>
     </div>
 

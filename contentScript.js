@@ -5,7 +5,9 @@ const STYLE_ID = "spicy-contrib-style";
 injectStyles();
 
 const isProfile = /^\/[^/]+\/?$/.test(location.pathname);
-if (isProfile) {
+const isRepoPage = /^\/[^/]+\/[^/]+/.test(location.pathname);
+
+if (isProfile || isRepoPage) {
   decorateWhenReady();
 } else {
   // Also handle embedded graphs on org or repo insights pages if present later
@@ -72,7 +74,17 @@ function injectStyles() {
 }
 
 function requestDataAndDecorate() {
-  chrome.runtime.sendMessage({ type: "FETCH_DATES" }, resp => {
+  // Get current repository from the page
+  const currentRepo = getCurrentRepository();
+  if (!currentRepo) {
+    console.warn("Spicy Contributions: Could not detect current repository");
+    return;
+  }
+
+  chrome.runtime.sendMessage({ 
+    type: "FETCH_DATES", 
+    currentRepo: currentRepo 
+  }, resp => {
     if (!resp?.ok) {
       // Optionally surface a small warning near the calendar
       console.warn("Spicy Contributions:", resp?.error || "unknown error");
@@ -82,6 +94,24 @@ function requestDataAndDecorate() {
     const failSet = new Set(resp.failDates || []);
     applyDecorations(bugSet, failSet);
   });
+}
+
+function getCurrentRepository() {
+  // Try to get repo from various page elements
+  const repoElement = document.querySelector('meta[name="octolytics-dimension-repository_nwo"]');
+  if (repoElement) {
+    return repoElement.getAttribute('content');
+  }
+
+  // Fallback: try to parse from URL
+  const pathParts = location.pathname.split('/').filter(Boolean);
+  if (pathParts.length >= 2) {
+    const owner = pathParts[0];
+    const repo = pathParts[1];
+    return `${owner}/${repo}`;
+  }
+
+  return null;
 }
 
 function applyDecorations(bugDates, failDates) {

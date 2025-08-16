@@ -7,8 +7,19 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     (async () => {
       try {
         const cfg = await getConfig();
-        if (!cfg.token || !cfg.repos || cfg.repos.length === 0) {
-          sendResponse({ ok: false, error: "Missing token or repositories in options." });
+        if (!cfg.token) {
+          sendResponse({ ok: false, error: "Missing GitHub token in options." });
+          return;
+        }
+
+        // Use current repo if provided, otherwise fall back to configured repos
+        let reposToCheck = [];
+        if (msg.currentRepo) {
+          reposToCheck = [msg.currentRepo];
+        } else if (cfg.repos && cfg.repos.length > 0) {
+          reposToCheck = cfg.repos;
+        } else {
+          sendResponse({ ok: false, error: "No repository detected on current page and no repositories configured in options." });
           return;
         }
 
@@ -16,8 +27,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         const headers = cfg.token ? { Authorization: `Bearer ${cfg.token}`, Accept: "application/vnd.github+json" } : { Accept: "application/vnd.github+json" };
 
         const [bugDates, failDates] = await Promise.all([
-          fetchBugDates(cfg.repos, cfg.bugLabel || "bug", sinceISO, headers),
-          fetchFailureDates(cfg.repos, sinceISO, headers)
+          fetchBugDates(reposToCheck, cfg.bugLabel || "bug", sinceISO, headers),
+          fetchFailureDates(reposToCheck, sinceISO, headers)
         ]);
 
         sendResponse({ ok: true, bugDates: Array.from(bugDates), failDates: Array.from(failDates) });

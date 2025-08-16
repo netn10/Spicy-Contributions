@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Test Issue - Spicy Contributions</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        textarea { height: 150px; }
+        button { background: #24292f; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; }
+        button:hover { background: #1b1f23; }
+        .result { margin-top: 20px; padding: 15px; border-radius: 4px; }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Create Test Issue for Spicy Contributions</h1>
+    
+    <div class="info">
+        <strong>Instructions:</strong>
+        <ol>
+            <li>Get a GitHub token from <a href="https://github.com/settings/tokens" target="_blank">GitHub Settings</a></li>
+            <li>Paste your token below</li>
+            <li>Click "Create Test Issue"</li>
+            <li>Close the created issue</li>
+            <li>Check your GitHub profile for red contribution squares!</li>
+        </ol>
+    </div>
+
+    <div class="form-group">
+        <label for="token">GitHub Personal Access Token:</label>
+        <input type="password" id="token" placeholder="ghp_..." />
+        <small>Token needs <code>repo</code> scope to create issues</small>
+    </div>
+
+    <div class="form-group">
+        <label for="title">Issue Title:</label>
+        <input type="text" id="title" value="Test Bug for Spicy Contributions Extension" />
+    </div>
+
+    <div class="form-group">
+        <label for="body">Issue Body:</label>
+        <textarea id="body">This is a test bug issue to verify the Spicy Contributions extension works correctly.
+
+## Test Steps:
+- [ ] Create this issue with "bug" label
+- [ ] Close this issue
+- [ ] Check if contribution square turns red on the closed date
+- [ ] Check if the extension shows the red square on your GitHub profile
+
+## Extension Features to Test:
+- Red squares for closed bug issues
+- Blinking squares for CI failures
+- Auto-detection of current repository
+
+This issue was created automatically for testing purposes.</textarea>
+    </div>
+
+    <button onclick="createIssue()">Create Test Issue</button>
+
+    <div id="result"></div>
+
+    <script>
+        async function createIssue() {
+            const token = document.getElementById('token').value.trim();
+            const title = document.getElementById('title').value.trim();
+            const body = document.getElementById('body').value.trim();
+
+            if (!token) {
+                showResult('Please enter a GitHub token', 'error');
+                return;
+            }
+
+            if (!title) {
+                showResult('Please enter an issue title', 'error');
+                return;
+            }
+
+            const issueData = {
+                title: title,
+                body: body,
+                labels: ['bug']
+            };
+
+            try {
+                const response = await fetch('https://api.github.com/repos/netn10/Spicy-Contributions/issues', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/vnd.github+json',
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(issueData)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showResult(`
+                        <strong>✅ Test issue created successfully!</strong><br>
+                        <strong>Issue URL:</strong> <a href="${data.html_url}" target="_blank">${data.html_url}</a><br>
+                        <strong>Issue Number:</strong> #${data.number}<br><br>
+                        <strong>Next steps:</strong><br>
+                        1. Visit the issue URL above<br>
+                        2. Close the issue (click "Close issue" button)<br>
+                        3. Go to your GitHub profile page<br>
+                        4. Check if the contribution square for today turns red<br>
+                        5. Make sure your Spicy Contributions extension is installed and configured
+                    `, 'success');
+                } else {
+                    showResult(`❌ Failed to create issue: ${data.message || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Request failed: ${error.message}`, 'error');
+            }
+        }
+
+        function showResult(message, type) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = message;
+            resultDiv.className = `result ${type}`;
+        }
+    </script>
+</body>
+</html>

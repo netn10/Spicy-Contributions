@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Spicy Contributions – Options</title>
+    <style>
+      body { font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; padding: 24px; max-width: 720px; }
+      label { display: block; font-weight: 600; margin-top: 16px; }
+      input[type="text"], input[type="password"], textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; }
+      small { color: #555; display: block; margin-top: 6px; }
+      .row { margin-top: 16px; display: flex; gap: 12px; align-items: center; }
+      button { padding: 10px 14px; border-radius: 10px; border: 1px solid #ccc; background: #f5f5f5; cursor: pointer; }
+      button.primary { background: #24292f; color: #fff; border-color: #24292f; }
+      .hint { background: #fafafa; border: 1px dashed #ccc; padding: 12px; border-radius: 8px; margin-top: 16px; }
+      code { background: #f0f0f0; padding: 2px 6px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>Spicy Contributions – Options</h1>
+
+    <label for="token">GitHub Personal Access Token (classic or fine-grained)</label>
+    <input id="token" type="password" placeholder="ghp_..." />
+    <small>Needs <code>repo</code> (for private repos) and <code>actions:read</code> scopes to see failing runs. Public-only? A no-scope token is fine for many repos.</small>
+
+    <label for="repos">Repositories to track (comma-separated)</label>
+    <textarea id="repos" rows="4" placeholder="owner1/repo1, owner2/repo2"></textarea>
+    <small>You can paste full repo URLs or <code>owner/repo</code> pairs. Only these repos are scanned.</small>
+
+    <label for="bugLabel">Bug label name</label>
+    <input id="bugLabel" type="text" placeholder="bug" />
+
+    <div class="row">
+      <button id="save" class="primary">Save</button>
+      <button id="test">Test fetch</button>
+      <span id="status"></span>
+    </div>
+
+    <div class="hint">
+      <strong>How it works</strong>
+      <ul>
+        <li>"Shipped bugs": any <em>closed</em> issue with the specified label in your selected repos; the contribution cell on the <em>closed date</em> turns red.</li>
+        <li>"CI failures": any failed workflow run in those repos; the cell for the run's <em>created date</em> blinks.</li>
+        <li>Only the last 365 days are scanned for performance.</li>
+      </ul>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -1,51 +1,104 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Spicy Contributions – Options</title>
-    <style>
-      body { font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; padding: 24px; max-width: 720px; }
-      label { display: block; font-weight: 600; margin-top: 16px; }
-      input[type="text"], input[type="password"], textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; }
-      small { color: #555; display: block; margin-top: 6px; }
-      .row { margin-top: 16px; display: flex; gap: 12px; align-items: center; }
-      button { padding: 10px 14px; border-radius: 10px; border: 1px solid #ccc; background: #f5f5f5; cursor: pointer; }
-      button.primary { background: #24292f; color: #fff; border-color: #24292f; }
-      .hint { background: #fafafa; border: 1px dashed #ccc; padding: 12px; border-radius: 8px; margin-top: 16px; }
-      code { background: #f0f0f0; padding: 2px 6px; border-radius: 6px; }
-    </style>
-  </head>
-  <body>
-    <h1>Spicy Contributions – Options</h1>
-
+<head>
+  <title>Spicy Contributes - Settings</title>
+  <style>
+    body {
+      width: 400px;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+    }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    button {
+      background: #2ea44f;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #2c974b;
+    }
+    .status {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 4px;
+      display: none;
+    }
+    .success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+  </style>
+</head>
+<body>
+  <h2>🌶️ Spicy Contributes Settings</h2>
+  
+  <div class="form-group">
     <label for="token">GitHub Personal Access Token (classic or fine-grained)</label>
-    <input id="token" type="password" placeholder="ghp_..." />
-    <small>Needs <code>repo</code> (for private repos) and <code>actions:read</code> scopes to see failing runs. Public-only? A no-scope token is fine for many repos.</small>
+    <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+    <small>Required for accessing commit data and test results</small>
+    <br>
+    <small style="color: #666;">
+      <strong>Need a token?</strong> 
+      <a href="https://github.com/settings/tokens" target="_blank">Create one here</a> 
+      with <code>public_repo</code> and <code>read:user</code> scopes.
+    </small>
+  </div>
 
-    <label for="repos">Repositories to track (comma-separated) - Optional</label>
-    <textarea id="repos" rows="4" placeholder="owner1/repo1, owner2/repo2"></textarea>
-    <small>You can paste full repo URLs or <code>owner/repo</code> pairs. The extension will auto-detect the current repository, but you can specify fallback repos here.</small>
-
-    <label for="bugLabel">Bug label name</label>
-    <input id="bugLabel" type="text" placeholder="bug" />
-
-    <div class="row">
-      <button id="save" class="primary">Save</button>
-      <button id="test">Test fetch</button>
-      <span id="status"></span>
+  <div class="form-group">
+    <div class="checkbox-group">
+      <input type="checkbox" id="enableBugDetection">
+      <label for="enableBugDetection">Turn contributions red when bugs are detected</label>
     </div>
+  </div>
 
-    <div class="hint">
-      <strong>How it works</strong>
-      <ul>
-        <li>The extension automatically detects the repository you're currently viewing on GitHub.</li>
-        <li>"Shipped bugs": any <em>closed</em> issue with the specified label in the detected repo; the contribution cell on the <em>closed date</em> turns red.</li>
-        <li>"CI failures": any failed workflow run in the detected repo; the cell for the run's <em>created date</em> blinks.</li>
-        <li>Only the last 365 days are scanned for performance.</li>
-        <li>If no repository is detected, it will use the repositories listed above as fallback.</li>
-      </ul>
+  <div class="form-group">
+    <div class="checkbox-group">
+      <input type="checkbox" id="enableTestBlinking">
+      <label for="enableTestBlinking">Blink contributions when tests fail</label>
     </div>
+  </div>
 
-    <script src="options.js"></script>
-  </body>
+  <div class="form-group">
+    <div class="checkbox-group">
+      <input type="checkbox" id="enableAutoRefresh">
+      <label for="enableAutoRefresh">Auto-refresh contribution data every 5 minutes</label>
+    </div>
+  </div>
+
+  <button id="save">Save Settings</button>
+  <button id="test">Test Connection</button>
+
+  <div id="status" class="status"></div>
+
+  <script src="options.js"></script>
+</body>
 </html>

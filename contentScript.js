@@ -1,173 +1,389 @@
-// Runs on GitHub pages; when on a profile, decorates the contribution graph.
-
-const STYLE_ID = "spicy-contrib-style";
-
-injectStyles();
-
-const isProfile = /^\/[^/]+\/?$/.test(location.pathname);
-const isRepoPage = /^\/[^/]+\/[^/]+/.test(location.pathname);
-
-if (isProfile || isRepoPage) {
-  decorateWhenReady();
-} else {
-  // Also handle embedded graphs on org or repo insights pages if present later
-  const obs = new MutationObserver(debounce(decorateIfGraphFound, 250));
-  obs.observe(document.documentElement, { childList: true, subtree: true });
-}
-
-function decorateWhenReady() {
-  // GitHub lazy-loads the calendar; wait for rects
-  const tryDecorate = () => {
-    const rects = queryCalendarRects();
-    if (rects.length) {
-      requestDataAndDecorate();
-      return true;
-    }
-    return false;
-  };
-
-  if (!tryDecorate()) {
-    const obs = new MutationObserver(() => { if (tryDecorate()) obs.disconnect(); });
-    obs.observe(document.documentElement, { childList: true, subtree: true });
-  }
-}
-
-function decorateIfGraphFound() {
-  const rects = queryCalendarRects();
-  if (rects.length) requestDataAndDecorate();
-}
-
-function queryCalendarRects() {
-  // Matches profile contribution calendar squares
-  return document.querySelectorAll('svg.js-calendar-graph-svg rect[data-date]');
-}
-
-function injectStyles() {
-  if (document.getElementById(STYLE_ID)) return;
-  const css = `
-    /* red tint for bug days (overrides GitHub SVG fill) */
-    .spicy-bug-day { fill: #cc0000 !important; }
-
-    /* blinking outline for failure days */
-    .spicy-fail-day {
-      stroke: currentColor !important;
-      stroke-width: 2 !important;
-      animation: spicy-blink 1.2s step-start 0s infinite;
-    }
-
-    @keyframes spicy-blink {
-      50% { opacity: 0.35; }
-    }
-
-    /* legend */
-    .spicy-legend {
-      display: inline-flex; align-items: center; gap: 8px; margin-left: 12px; font-size: 12px;
-    }
-    .spicy-swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
-    .spicy-swatch.bug { background: #cc0000; }
-    .spicy-swatch.fail { background: transparent; outline: 2px solid currentColor; animation: spicy-blink 1.2s step-start 0s infinite; }
-  `;
-  const style = document.createElement("style");
-  style.id = STYLE_ID;
-  style.textContent = css;
-  document.documentElement.appendChild(style);
-}
-
-function requestDataAndDecorate() {
-  // Get current repository from the page
-  const currentRepo = getCurrentRepository();
-  if (!currentRepo) {
-    console.warn("Spicy Contributions: Could not detect current repository");
-    return;
+// Spicy Contributes - Dynamic GitHub Contribution Graph
+class SpicyContributes {
+  constructor() {
+    this.settings = {};
+    this.contributions = new Map();
+    this.commitCache = new Map(); // Cache for API responses
+    this.bugKeywords = ['bug', 'fix', 'hotfix', 'patch', 'issue', 'crash', 'error'];
+    this.testKeywords = ['test', 'spec', 'fail', 'broken', 'ci', 'travis', 'github-actions'];
+    this.observer = null;
+    this.init();
   }
 
-  chrome.runtime.sendMessage({ 
-    type: "FETCH_DATES", 
-    currentRepo: currentRepo 
-  }, resp => {
-    if (!resp?.ok) {
-      // Optionally surface a small warning near the calendar
-      console.warn("Spicy Contributions:", resp?.error || "unknown error");
-      return;
-    }
-    const bugSet = new Set(resp.bugDates || []);
-    const failSet = new Set(resp.failDates || []);
-    applyDecorations(bugSet, failSet);
-  });
-}
-
-function getCurrentRepository() {
-  // Try to get repo from various page elements
-  const repoElement = document.querySelector('meta[name="octolytics-dimension-repository_nwo"]');
-  if (repoElement) {
-    return repoElement.getAttribute('content');
+  async init() {
+    await this.loadSettings();
+    this.setupObserver();
+    this.injectStyles();
+    this.processExistingContributions();
   }
 
-  // Fallback: try to parse from URL
-  const pathParts = location.pathname.split('/').filter(Boolean);
-  if (pathParts.length >= 2) {
-    const owner = pathParts[0];
-    const repo = pathParts[1];
-    return `${owner}/${repo}`;
+  async loadSettings() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get([
+        'githubToken',
+        'enableBugDetection',
+        'enableTestBlinking',
+        'enableAutoRefresh'
+      ], (items) => {
+        this.settings = items;
+        resolve();
+      });
+    });
   }
 
-  return null;
-}
+  setupObserver() {
+    // Watch for dynamic content changes (GitHub uses SPA navigation)
+    this.observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'childList') {
+          mutation.addedNodes.forEach((node) => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              this.processContributionGraph(node);
+            }
+          });
+        }
+      });
+    });
 
-function applyDecorations(bugDates, failDates) {
-  const rects = queryCalendarRects();
-  let bugCount = 0, failCount = 0;
+    this.observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
 
-  rects.forEach(rect => {
-    const date = rect.getAttribute("data-date"); // YYYY-MM-DD
-    let touched = false;
-
-    if (bugDates.has(date)) {
-      rect.classList.add("spicy-bug-day");
-      touched = true;
-      bugCount++;
-    }
-
-    if (failDates.has(date)) {
-      rect.classList.add("spicy-fail-day");
-      touched = true;
-      failCount++;
-    }
-
-    if (!touched) {
-      rect.classList.remove("spicy-bug-day", "spicy-fail-day");
-    }
-  });
-
-  attachLegend(bugCount, failCount);
-}
-
-function attachLegend(bugCount, failCount) {
-  // Add an inline legend next to "Contribution activity" heading (if present)
-  const heading = document.querySelector('h2:has(svg.js-calendar-graph-svg), div.js-yearly-contributions h2, div.js-yearly-contributions h2.h3');
-  const container = document.querySelector('div.js-yearly-contributions, div.position-relative');
-
-  // Fallback target
-  const target = heading || container;
-  if (!target) return;
-
-  let legend = document.getElementById("spicy-legend");
-  if (!legend) {
-    legend = document.createElement("span");
-    legend.id = "spicy-legend";
-    legend.className = "spicy-legend";
-    legend.innerHTML = `
-      <span class="spicy-swatch bug" title="Closed issues with bug label"></span> <span>Shipped bugs</span>
-      <span class="spicy-swatch fail" title="Failed workflow runs"></span> <span>CI failures</span>
+  injectStyles() {
+    const style = document.createElement('style');
+    style.textContent = `
+      .spicy-contribution {
+        transition: all 0.3s ease;
+      }
+      
+      .spicy-bug {
+        background-color: #dc3545 !important;
+        box-shadow: 0 0 10px rgba(220, 53, 69, 0.5);
+        animation: spicy-bug-pulse 2s infinite;
+      }
+      
+      .spicy-test-fail {
+        animation: spicy-blink 1s infinite;
+      }
+      
+      @keyframes spicy-bug-pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+      }
+      
+      @keyframes spicy-blink {
+        0%, 50% { opacity: 1; }
+        51%, 100% { opacity: 0.3; }
+      }
+      
+      .spicy-tooltip {
+        position: absolute;
+        background: #24292e;
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        z-index: 1000;
+        pointer-events: none;
+        white-space: nowrap;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      }
     `;
-    target.appendChild(legend);
+    document.head.appendChild(style);
   }
+
+  processExistingContributions() {
+    this.processContributionGraph(document.body);
+  }
+
+  processContributionGraph(container) {
+    // Find contribution graph cells
+    const cells = container.querySelectorAll('.ContributionCalendar-day, [data-date]');
+    
+    cells.forEach(cell => {
+      if (cell.dataset.date && !cell.classList.contains('spicy-processed')) {
+        this.processContributionCell(cell);
+      }
+    });
+  }
+
+  async processContributionCell(cell) {
+    const date = cell.dataset.date;
+    if (!date || cell.classList.contains('spicy-processed')) return;
+
+    cell.classList.add('spicy-processed');
+    
+    // Get contribution data for this date
+    const contributionData = await this.getContributionData(date);
+    
+    if (contributionData) {
+      this.applySpicyEffects(cell, contributionData);
+    }
+  }
+
+  async getContributionData(date) {
+    if (!this.settings.githubToken) return null;
+
+    try {
+      // Get username from current page
+      const username = this.getCurrentUsername();
+      if (!username) return null;
+
+      // Fetch commits for this date
+      const commits = await this.fetchCommits(username, date);
+      
+      return {
+        date,
+        commits,
+        hasBugs: this.detectBugs(commits),
+        hasTestFailures: this.detectTestFailures(commits)
+      };
+    } catch (error) {
+      console.error('Error fetching contribution data:', error);
+      return null;
+    }
+  }
+
+  getCurrentUsername() {
+    // Try multiple methods to get username
+    let username = null;
+    
+    // Method 1: From URL
+    const urlMatch = window.location.pathname.match(/^\/([^\/]+)/);
+    if (urlMatch) {
+      username = urlMatch[1];
+      return username;
+    }
+    
+    // Method 2: From meta tag
+    const profileLink = document.querySelector('meta[property="og:url"]');
+    if (profileLink) {
+      const url = profileLink.getAttribute('content');
+      const match = url.match(/github\.com\/([^\/]+)/);
+      if (match) {
+        username = match[1];
+        return username;
+      }
+    }
+
+    // Method 3: From page elements
+    const usernameElement = document.querySelector('.p-nickname, .username, [data-testid="username"], .vcard-username');
+    if (usernameElement) {
+      username = usernameElement.textContent.trim();
+      return username;
+    }
+    
+    return null;
+  }
+
+  async fetchCommits(username, date) {
+    try {
+      // Format date properly for GitHub API
+      const formattedDate = new Date(date).toISOString().split('T')[0];
+      
+      // Check cache first
+      const cacheKey = `${username}-${formattedDate}`;
+      if (this.commitCache.has(cacheKey)) {
+        return this.commitCache.get(cacheKey);
+      }
+      
+      // Check if we have a valid token
+      if (!this.settings.githubToken || this.settings.githubToken.trim() === '') {
+        console.warn('Spicy Contributes: No GitHub token configured. Please add a token in the extension options.');
+        return [];
+      }
+      
+      // Check rate limits first
+      const rateLimitResponse = await fetch('https://api.github.com/rate_limit', {
+        headers: {
+          'Authorization': `token ${this.settings.githubToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'Spicy-Contributes-Extension'
+        }
+      });
+      
+      if (rateLimitResponse.ok) {
+        const rateLimitData = await rateLimitResponse.json();
+        const searchLimit = rateLimitData.resources.search;
+        
+        if (searchLimit.remaining === 0) {
+          console.warn('Spicy Contributes: Search API rate limit exceeded, using alternative method');
+          return await this.fetchCommitsAlternative(username, formattedDate);
+        }
+      }
+      
+      // Use search API with rate limit check
+      const response = await fetch(
+        `https://api.github.com/search/commits?q=author:${username}+committer-date:${formattedDate}`,
+        {
+          headers: {
+            'Authorization': `token ${this.settings.githubToken}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'Spicy-Contributes-Extension'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        // Log the specific error for debugging
+        console.warn(`Spicy Contributes: GitHub API error ${response.status}: ${response.statusText}`);
+        
+        // Check if it's authentication error
+        if (response.status === 401) {
+          console.error('Spicy Contributes: Invalid GitHub token. Please check your token in the extension options.');
+          return [];
+        }
+        
+        // Check if it's rate limiting or forbidden
+        if (response.status === 403 || response.status === 429) {
+          console.warn('Spicy Contributes: Rate limited or forbidden, using alternative method');
+          return await this.fetchCommitsAlternative(username, formattedDate);
+        }
+        
+        return [];
+      }
+
+      const data = await response.json();
+      const commits = data.items || [];
+      
+      // Cache the result
+      this.commitCache.set(cacheKey, commits);
+      
+      return commits;
+    } catch (error) {
+      console.error('Spicy Contributes: Error fetching commits:', error);
+      return [];
+    }
+  }
+
+  async fetchCommitsAlternative(username, date) {
+    try {
+      // Check if we have a valid token
+      if (!this.settings.githubToken || this.settings.githubToken.trim() === '') {
+        return [];
+      }
+      
+      // Use a more efficient approach - get recent commits from user's repos
+      const response = await fetch(
+        `https://api.github.com/users/${username}/repos?sort=updated&per_page=10`,
+        {
+          headers: {
+            'Authorization': `token ${this.settings.githubToken}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'Spicy-Contributes-Extension'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        console.warn(`Spicy Contributes: Alternative method failed with status ${response.status}`);
+        return [];
+      }
+
+      const repos = await response.json();
+      const allCommits = [];
+      
+      // Get commits from recent repositories
+      for (const repo of repos.slice(0, 3)) { // Limit to 3 most recent repos
+        try {
+          const commitsResponse = await fetch(
+            `https://api.github.com/repos/${username}/${repo.name}/commits?since=${date}T00:00:00Z&until=${date}T23:59:59Z&author=${username}`,
+            {
+              headers: {
+                'Authorization': `token ${this.settings.githubToken}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'Spicy-Contributes-Extension'
+              }
+            }
+          );
+          
+          if (commitsResponse.ok) {
+            const repoCommits = await commitsResponse.json();
+            allCommits.push(...repoCommits);
+          } else {
+            console.warn(`Spicy Contributes: Failed to fetch commits from ${repo.name}: ${commitsResponse.status}`);
+          }
+        } catch (error) {
+          console.warn(`Spicy Contributes: Error fetching commits from ${repo.name}:`, error);
+        }
+      }
+
+      // Cache the result using the same cache key format
+      const cacheKey = `${username}-${date}`;
+      this.commitCache.set(cacheKey, allCommits);
+      
+      return allCommits;
+    } catch (error) {
+      console.error('Spicy Contributes: Error in alternative fetch method:', error);
+      return [];
+    }
+  }
+
+  detectBugs(commits) {
+    if (!this.settings.enableBugDetection) return false;
+
+    return commits.some(commit => {
+      const message = commit.commit.message.toLowerCase();
+      return this.bugKeywords.some(keyword => message.includes(keyword));
+    });
+  }
+
+  detectTestFailures(commits) {
+    if (!this.settings.enableTestBlinking) return false;
+
+    return commits.some(commit => {
+      const message = commit.commit.message.toLowerCase();
+      return this.testKeywords.some(keyword => message.includes(keyword));
+    });
+  }
+
+  applySpicyEffects(cell, data) {
+    const originalColor = cell.style.backgroundColor;
+    
+    if (data.hasBugs) {
+      cell.classList.add('spicy-bug');
+      this.addTooltip(cell, '🐛 Bug detected in this commit!');
+    } else if (data.hasTestFailures) {
+      cell.classList.add('spicy-test-fail');
+      this.addTooltip(cell, '⚠️ Test failure detected!');
+    }
+
+    // Store original state for potential restoration
+    cell.dataset.spicyOriginalColor = originalColor;
+  }
+
+  addTooltip(cell, message) {
+    cell.addEventListener('mouseenter', (e) => {
+      const tooltip = document.createElement('div');
+      tooltip.className = 'spicy-tooltip';
+      tooltip.textContent = message;
+      
+      const rect = cell.getBoundingClientRect();
+      tooltip.style.left = rect.left + 'px';
+      tooltip.style.top = (rect.top - 40) + 'px';
+      
+      document.body.appendChild(tooltip);
+      cell.spicyTooltip = tooltip;
+    });
+
+    cell.addEventListener('mouseleave', () => {
+      if (cell.spicyTooltip) {
+        cell.spicyTooltip.remove();
+        cell.spicyTooltip = null;
+      }
+    });
+  }
+
+  
 }
 
-function debounce(fn, ms) {
-  let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn.apply(null, args), ms);
-  };
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    new SpicyContributes();
+  });
+} else {
+  new SpicyContributes();
 }

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>GitHub Token Test - Spicy Contributes</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-family: monospace;
+    }
+    button {
+      background: #2ea44f;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-right: 10px;
+    }
+    button:hover {
+      background: #2c974b;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 4px;
+      display: none;
+    }
+    .success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    .info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+    }
+    .code {
+      background: #f8f9fa;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔑 GitHub Token Test</h1>
+  <p>Use this page to test if your GitHub Personal Access Token is working correctly for the Spicy Contributes extension.</p>
+  
+  <div class="form-group">
+    <label for="token">GitHub Personal Access Token:</label>
+    <input type="text" id="token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+  </div>
+  
+  <button onclick="testToken()">Test Token</button>
+  <button onclick="testSearchAPI()">Test Search API</button>
+  <button onclick="clearResults()">Clear Results</button>
+  
+  <div id="result" class="result"></div>
+  
+  <div class="info" style="display: block; margin-top: 30px;">
+    <h3>How to create a GitHub token:</h3>
+    <ol>
+      <li>Go to <a href="https://github.com/settings/tokens" target="_blank">GitHub Settings > Developer settings > Personal access tokens</a></li>
+      <li>Click "Generate new token (classic)"</li>
+      <li>Give it a name like "Spicy Contributes"</li>
+      <li>Select these scopes:
+        <ul>
+          <li><code>public_repo</code> - to read public repository data</li>
+          <li><code>read:user</code> - to read user information</li>
+        </ul>
+      </li>
+      <li>Click "Generate token"</li>
+      <li>Copy the token (starts with <code>ghp_</code>)</li>
+    </ol>
+  </div>
+
+  <script>
+    async function testToken() {
+      const token = document.getElementById('token').value.trim();
+      const resultDiv = document.getElementById('result');
+      
+      if (!token) {
+        showResult('Please enter a GitHub token', 'error');
+        return;
+      }
+      
+      try {
+        const response = await fetch('https://api.github.com/user', {
+          headers: {
+            'Authorization': `token ${token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'Spicy-Contributes-Extension'
+          }
+        });
+        
+        if (response.ok) {
+          const user = await response.json();
+          showResult(`✅ Token is valid! Logged in as: <strong>${user.login}</strong>`, 'success');
+        } else if (response.status === 401) {
+          showResult('❌ Invalid token. Please check your GitHub Personal Access Token.', 'error');
+        } else if (response.status === 403) {
+          showResult('❌ Token lacks required permissions. Please ensure your token has the necessary scopes.', 'error');
+        } else {
+          showResult(`❌ Connection failed with status ${response.status}. Please check your token.`, 'error');
+        }
+      } catch (error) {
+        showResult('❌ Connection failed: ' + error.message, 'error');
+      }
+    }
+    
+    async function testSearchAPI() {
+      const token = document.getElementById('token').value.trim();
+      const resultDiv = document.getElementById('result');
+      
+      if (!token) {
+        showResult('Please enter a GitHub token first', 'error');
+        return;
+      }
+      
+      try {
+        // Test the search API specifically
+        const response = await fetch('https://api.github.com/search/commits?q=author:test+committer-date:2024-01-01', {
+          headers: {
+            'Authorization': `token ${token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'Spicy-Contributes-Extension'
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          showResult(`✅ Search API is working! Found ${data.total_count} commits in test search.`, 'success');
+        } else if (response.status === 403) {
+          showResult('❌ Search API access denied. This is likely due to rate limiting or insufficient permissions.', 'error');
+        } else {
+          showResult(`❌ Search API failed with status ${response.status}. This might be a rate limit issue.`, 'error');
+        }
+      } catch (error) {
+        showResult('❌ Search API test failed: ' + error.message, 'error');
+      }
+    }
+    
+    function showResult(message, type) {
+      const resultDiv = document.getElementById('result');
+      resultDiv.innerHTML = message;
+      resultDiv.className = `result ${type}`;
+      resultDiv.style.display = 'block';
+    }
+    
+    function clearResults() {
+      document.getElementById('result').style.display = 'none';
+    }
+  </script>
+</body>
+</html>
